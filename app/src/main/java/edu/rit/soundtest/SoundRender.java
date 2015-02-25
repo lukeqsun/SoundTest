@@ -8,10 +8,10 @@ import android.view.SurfaceHolder;
 import android.view.View;
 import android.widget.TextView;
 
-public class MusicRender implements SurfaceHolder.Callback {
+public class SoundRender implements SurfaceHolder.Callback {
     private SurfaceHolder surfaceHolder;
 
-    private TextView title, time;
+    private TextView title, artist, time;
 
     private View view;
 
@@ -24,12 +24,11 @@ public class MusicRender implements SurfaceHolder.Callback {
      *
      * @param context context of the view
      */
-    public MusicRender(Context context) {
+    public SoundRender(Context context) {
         view = LayoutInflater.from(context).inflate(R.layout.card, null);
         title = (TextView) view.findViewById(R.id.title);
         time = (TextView) view.findViewById(R.id.time);
     }
-
 
     @Override
 

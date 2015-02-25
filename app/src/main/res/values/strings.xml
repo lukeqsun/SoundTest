@@ -1,15 +1,17 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
-
-    <string name="app_name">Hz Player</string>
+    <string name="app_name">Sound Player</string>
     <string name="trigger_phrase">Play Sound</string>
     <string name="stop">Stop</string>
     <string name="play">Play</string>
     <string name="pause">Pause</string>
-    <string name="next">Increase 100Hz</string>
-    <string name="previous">Reduce 100Hz</string>
+    <string name="next">Next</string>
+    <string name="previous">Previous</string>
     <string name="shuffle">Shuffle</string>
     <string name="loading_message">Loading&#8230;</string>
     <string name="no_songs">No songs found</string>
     <string name="error_loading_music">An error occurred while loading your music</string>
+    <string name="play_control">Play Control</string>
+    <string name="frequency">Frequency Control</string>
+    <string name="delay">Delay Control</string>
 </resources>

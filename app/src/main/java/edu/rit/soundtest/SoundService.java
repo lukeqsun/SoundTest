@@ -6,39 +6,55 @@ import android.content.Intent;
 import android.media.AudioFormat;
 import android.media.AudioManager;
 import android.media.AudioTrack;
-import android.os.AsyncTask;
 import android.os.Binder;
-import android.os.CountDownTimer;
 import android.os.Handler;
 import android.os.IBinder;
-import android.view.View;
-import android.widget.RemoteViews;
 
 import com.google.android.glass.timeline.LiveCard;
 
-public class MainService extends Service {
+public class SoundService extends Service {
     private final String CARD_ID = "my_music_card";
     private final IBinder binder = new LocalBinder();
     private LiveCard liveCard;
     private Handler handler = new Handler();
     private boolean paused = true;
-    private MusicRender render;
+    private SoundRender render;
 
-    private int duration = 3; // seconds
+    private int duration = 1; // seconds
     private int sampleRate = 8000;
     private final int numSamples = duration * sampleRate;
     private final double sample[] = new double[numSamples];
     private final byte generatedSnd[] = new byte[2 * numSamples];
-    private double freqOfTone = 500; // hz
     private AudioTrack audioTrack;
+
+    private double freqOfTone = 500; // hz
+    private int delay = 0; // sample
+
+    public static final int MIN_FREQUENCY_VALUE = 100;
+    public static final int MAX_FREQUENCY_VALUE = 4000;
+    public static final int MIN_DELAY_VALUE = 0;
+    public static final int MAX_DELAY_VALUE = 441;
+
+    private long toneUpdateTime = 1000;
+    private String playStatus = "|| Paused";
+
+    private boolean enableDelayPeriod = false;
+
     /**
      * Thread which we will update our songs time in
      */
     private Runnable updateTask = new Runnable() {
         @Override
         public void run() {
-            genTone();
-            handler.postDelayed(this, 1000);
+            if (enableDelayPeriod) {
+                enableDelayPeriod = false;
+                long realDelay = delay * 1000 / sampleRate;
+                handler.postAtTime(updateTask, realDelay);
+            } else {
+                enableDelayPeriod = true;
+                genTone();
+                handler.postAtTime(updateTask, toneUpdateTime);
+            }
         }
     };
 
@@ -61,64 +77,24 @@ public class MainService extends Service {
     public int onStartCommand(Intent intent, int flags, int startId) {
         if (liveCard == null) {
             liveCard = new LiveCard(getApplicationContext(), CARD_ID);
-            // Display the options menu when the live card is tapped.
-            Intent menuIntent = new Intent(this, MenuActivity.class);
-            menuIntent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK | Intent.FLAG_ACTIVITY_CLEAR_TASK);
-            liveCard.setAction(PendingIntent.getActivity(this, 0, menuIntent, 0));
-            final RemoteViews loadingView = new RemoteViews(getApplicationContext().getPackageName(), R.layout.loading_card);
-            liveCard.setViews(loadingView);
-            //Load our files in the background. I believe that doing this on the main thread caused an issue with my glass
-            // that I had to factory reset to to resolve
-            new AsyncTask<Void, Void, Boolean>() {
-                @Override
-                protected Boolean doInBackground(Void... params) {
-                    try {
-                        return true;
-                    } catch (Exception e) {
-                        return false;
-                    }
-                }
+            // Display the sound card when the live card is tapped.
+            Intent soundIntent = new Intent(this, SoundActivity.class);
+            soundIntent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK | Intent.FLAG_ACTIVITY_CLEAR_TASK);
+            liveCard.setAction(PendingIntent.getActivity(this, 0, soundIntent, 0));
 
-                @Override
-                protected void onPostExecute(Boolean result) {
-                    if (result) {
-                        //Make sure we actually have songs to play
+            render = new SoundRender(getApplicationContext());
+            if (isPaused())
+                playStatus = "|| Paused";
+            else
+                playStatus = "|> Playing";
 
-                        render = new MusicRender(getApplicationContext());
+            render.setTextOfView(playStatus + "\nfrequency: " + freqOfTone + " Hz\ndelay: " + delay + " sample(s)", null);
 
-                        liveCard.unpublish();
-                        liveCard.setDirectRenderingEnabled(true).getSurfaceHolder().addCallback(render);
-                        //Immediately play the first song
-                        try {
-                            render.setTextOfView("500Hz", null);
-                            //handler.postAtTime(updateTask, 250);
-                            liveCard.publish(LiveCard.PublishMode.REVEAL);
-                        } catch (Exception e) {
+            liveCard.setDirectRenderingEnabled(true).getSurfaceHolder().addCallback(render);
 
-                        }
-
-                    } else {
-                        //If we have error, fail gracefully
-                        loadingView.setTextViewText(R.id.message, getString(R.string.error_loading_music));
-                        loadingView.setViewVisibility(R.id.progressBar, View.GONE);
-                        liveCard.setViews(loadingView);
-                        //Start a three second timer to kill the program
-                        new CountDownTimer(3000, 3000) {
-                            @Override
-                            public void onTick(long millisUntilFinished) {
-
-                            }
-
-                            @Override
-                            public void onFinish() {
-                                stopSelf();
-                            }
-                        }.start();
-                    }
-                    super.onPostExecute(result);
-                }
-            }.execute();
             liveCard.publish(LiveCard.PublishMode.REVEAL);
+        } else {
+            liveCard.navigate();
         }
         return START_STICKY;
     }
@@ -143,6 +119,14 @@ public class MainService extends Service {
         super.onDestroy();
     }
 
+    public int getCurrentFrequency() {
+        return (int)freqOfTone;
+    }
+
+    public int getCurrentDelay() {
+        return delay;
+    }
+
     /**
      * @return If the music is currently paused
      */
@@ -160,6 +144,11 @@ public class MainService extends Service {
             }
             paused = true;
             audioTrack.pause();
+
+            playStatus = "|| Paused";
+
+            render.setTextOfView(playStatus +
+                            "\nfrequency: " + freqOfTone + " Hz\ndelay: " + delay + " sample(s)", null);
         }
     }
 
@@ -168,35 +157,45 @@ public class MainService extends Service {
      */
     public void resumeMusic() {
         if (paused) {
+            playStatus = "|> Playing";
+
+            render.setTextOfView(playStatus +
+                            "\nfrequency: " + freqOfTone + " Hz\ndelay: " + delay + " sample(s)", null);
             paused = false;
             audioTrack.play();
-            handler.postAtTime(updateTask, 1000);
+            handler.postAtTime(updateTask, toneUpdateTime);
         }
     }
 
     /**
-     * Goes back to the previous track
+     * Update frequency
      */
-    public void previousTrack() {
+    public void updateFrequency(double delta) {
         try {
-            freqOfTone -= 100;
-            if (freqOfTone <= 0)
-                freqOfTone = 0;
-            render.setTextOfView("" + freqOfTone + "Hz", null);
+            freqOfTone += delta;
+            if (freqOfTone <= MIN_FREQUENCY_VALUE)
+                freqOfTone = MIN_FREQUENCY_VALUE;
+            else if (freqOfTone >= MAX_FREQUENCY_VALUE)
+                freqOfTone = MAX_FREQUENCY_VALUE;
+            render.setTextOfView(playStatus + "\nfrequency: " + freqOfTone + " Hz\ndelay: " + delay + " sample(s)",
+                    null);
         } catch (Exception e) {
 
         }
     }
 
     /**
-     * Goes to the next track
+     * Update delay
      */
-    public void nextTrack() {
+    public void updateDelay(double delta) {
         try {
-            freqOfTone += 100;
-            if (freqOfTone >= 1000)
-                freqOfTone = 1000;
-            render.setTextOfView("" + freqOfTone + "Hz", null);
+            delay += delta/10;
+            if (delay <= MIN_DELAY_VALUE)
+                delay = MIN_DELAY_VALUE;
+            else if (delay >= MAX_DELAY_VALUE)
+                delay = MAX_DELAY_VALUE;
+            render.setTextOfView(playStatus + "\nfrequency: " + freqOfTone + " Hz\ndelay: " + delay + " sample(s)",
+                    null);
         } catch (Exception e) {
 
         }
@@ -240,8 +239,8 @@ public class MainService extends Service {
     }
 
     public class LocalBinder extends Binder {
-        MainService getService() {
-            return MainService.this;
+        SoundService getService() {
+            return SoundService.this;
         }
     }
 }

@@ -4,13 +4,11 @@
         android:icon="@drawable/ic_music_pause_50"
         android:title="@string/pause" />
     <item
-        android:id="@+id/prev"
-        android:icon="@drawable/ic_music_previous_50"
-        android:title="@string/previous" />
+        android:id="@+id/frequency"
+        android:title="@string/frequency" />
     <item
-        android:id="@+id/next"
-        android:icon="@drawable/ic_music_next_50"
-        android:title="@string/next" />
+        android:id="@+id/delay"
+        android:title="@string/delay" />
     <item
         android:id="@+id/stop"
         android:icon="@drawable/ic_no_50"

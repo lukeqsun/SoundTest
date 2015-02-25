@@ -3,12 +3,6 @@
     android:layout_width="match_parent"
     android:layout_height="match_parent">
     <!-- Album artwork -->
-    <ImageView
-        android:id="@+id/albumArt"
-        android:layout_width="match_parent"
-        android:layout_height="match_parent"
-        android:adjustViewBounds="true"
-        android:scaleType="centerCrop" />
 
     <RelativeLayout
         android:layout_width="match_parent"
@@ -24,16 +18,7 @@
             android:layout_height="wrap_content"
             android:layout_centerHorizontal="true"
             android:drawablePadding="8dp"
-            android:maxLines="2"
-            android:textColor="#FFFFFF" />
-        <!-- Song Artist -->
-        <TextView
-            android:id="@+id/artist"
-            style="?android:attr/textAppearanceSmall"
-            android:layout_width="wrap_content"
-            android:layout_height="wrap_content"
-            android:layout_alignParentLeft="true"
-            android:layout_below="@id/title"
+            android:maxLines="4"
             android:textColor="#FFFFFF" />
         <!-- Time of song -->
         <TextView

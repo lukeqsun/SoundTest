@@ -17,7 +17,7 @@
         android:label="@string/app_name">
 
         <service
-            android:name="edu.rit.soundtest.MainService"
+            android:name=".SoundService"
             android:enabled="true"
             android:exported="true"
             android:icon="@drawable/ic_launcher"
@@ -31,7 +31,7 @@
         </service>
 
         <activity
-            android:name="edu.rit.soundtest.MenuActivity"
+            android:name="edu.rit.soundtest.SoundActivity"
             android:theme="@style/MenuTheme" />
 
     </application>
