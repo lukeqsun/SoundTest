@@ -6,6 +6,7 @@ import android.content.Intent;
 import android.media.AudioFormat;
 import android.media.AudioManager;
 import android.media.AudioTrack;
+import android.os.AsyncTask;
 import android.os.Binder;
 import android.os.Handler;
 import android.os.IBinder;
@@ -24,6 +25,7 @@ public class SoundService extends Service {
     private int sampleRate = 8000;
     private final int numSamples = duration * sampleRate;
     private final double sample[] = new double[numSamples];
+    private final double sample2[] = new double[numSamples];
     private final byte generatedSnd[] = new byte[2 * numSamples];
     private AudioTrack audioTrack;
 
@@ -35,28 +37,10 @@ public class SoundService extends Service {
     public static final int MIN_DELAY_VALUE = 0;
     public static final int MAX_DELAY_VALUE = 441;
 
-    private long toneUpdateTime = 1000;
     private String playStatus = "|| Paused";
 
-    private boolean enableDelayPeriod = false;
-
-    /**
-     * Thread which we will update our songs time in
-     */
-    private Runnable updateTask = new Runnable() {
-        @Override
-        public void run() {
-            if (enableDelayPeriod) {
-                enableDelayPeriod = false;
-                long realDelay = delay * 1000 / sampleRate;
-                handler.postAtTime(updateTask, realDelay);
-            } else {
-                enableDelayPeriod = true;
-                genTone();
-                handler.postAtTime(updateTask, toneUpdateTime);
-            }
-        }
-    };
+    private AudioControlTask audioControlTask = null;
+    private AudioUpdateTask audioUpdateTask = null;
 
     @Override
     public IBinder onBind(Intent intent) {
@@ -108,9 +92,14 @@ public class SoundService extends Service {
             liveCard = null;
         }
 
-        if (handler != null) {
-            handler.removeCallbacks(updateTask);
-            handler = null;
+        if (audioControlTask != null) {
+            audioControlTask.cancel(true);
+            audioControlTask = null;
+        }
+
+        if (audioUpdateTask != null) {
+            audioUpdateTask.cancel(true);
+            audioUpdateTask = null;
         }
 
         if (audioTrack != null)
@@ -139,11 +128,18 @@ public class SoundService extends Service {
      */
     public void pauseMusic() {
         if (!paused) {
-            if (handler != null) {
-                handler.removeCallbacks(updateTask);
-            }
             paused = true;
             audioTrack.pause();
+
+            if (audioControlTask != null) {
+                audioControlTask.cancel(true);
+                audioControlTask = null;
+            }
+
+            if (audioUpdateTask != null) {
+                audioUpdateTask.cancel(true);
+                audioUpdateTask = null;
+            }
 
             playStatus = "|| Paused";
 
@@ -162,8 +158,11 @@ public class SoundService extends Service {
             render.setTextOfView(playStatus +
                             "\nfrequency: " + freqOfTone + " Hz\ndelay: " + delay + " sample(s)", null);
             paused = false;
-            audioTrack.play();
-            handler.postAtTime(updateTask, toneUpdateTime);
+
+            if (audioUpdateTask == null) {
+                audioUpdateTask = new AudioUpdateTask();
+                audioUpdateTask.execute();
+            }
         }
     }
 
@@ -205,12 +204,17 @@ public class SoundService extends Service {
         for (int i = 0; i < numSamples; ++i) {
             //  float angular_frequency =
             sample[i] = Math.sin(2 * Math.PI * i / (sampleRate / freqOfTone));
+
+            if (i + delay + 1 > numSamples)
+                sample2[i] = Math.sin(2 * Math.PI * i/ (sampleRate / (freqOfTone*2)));
+            else
+                sample2[i] = Math.sin(2 * Math.PI * i/ (sampleRate / (freqOfTone*2)))+sample[i+delay];
         }
         int idx = 0;
 
         // convert to 16 bit pcm sound array
         // assumes the sample buffer is normalised.
-        for (double dVal : sample) {
+        for (double dVal : sample2) {
             short val = (short) (dVal * 32767);
             generatedSnd[idx++] = (byte) (val & 0x00ff);
             generatedSnd[idx++] = (byte) ((val & 0xff00) >>> 8);
@@ -241,6 +245,54 @@ public class SoundService extends Service {
     public class LocalBinder extends Binder {
         SoundService getService() {
             return SoundService.this;
+        }
+    }
+
+
+    private class AudioUpdateTask extends AsyncTask<Integer, Void, Void> {
+
+        @Override
+        protected Void doInBackground(Integer... params) {
+            genTone();
+
+            return null;
+        }
+
+        @Override
+        protected void onPostExecute(Void v) {
+            audioControlTask = new AudioControlTask();
+            audioControlTask.execute();
+        }
+
+        @Override
+        protected void onCancelled() {
+            if (audioControlTask != null) {
+                audioControlTask.cancel(true);
+                audioControlTask = null;
+            }
+        }
+    }
+
+    private class AudioControlTask extends AsyncTask<Integer, Void, Void> {
+        @Override
+        protected Void doInBackground(Integer... params) {
+            int playState = audioTrack.getPlayState();
+            if (playState == AudioTrack.PLAYSTATE_PAUSED ||
+                    playState == AudioTrack.PLAYSTATE_STOPPED)
+                audioTrack.play();
+
+            return null;
+        }
+
+        @Override
+        protected void onPostExecute(Void v) {
+            audioUpdateTask = new AudioUpdateTask();
+            audioUpdateTask.execute();
+        }
+
+        @Override
+        protected void onCancelled() {
+            audioTrack.pause();
         }
     }
 }
